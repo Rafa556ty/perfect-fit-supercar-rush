@@ -950,6 +950,20 @@ export function RacingGame() {
             </div>
           </div>
         )}
+        {showPoliceOff && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-scrim px-6">
+            <div className="corner-cut w-full max-w-xs border border-hud-border bg-card p-5 text-center">
+              <ShieldAlert className="mx-auto mb-2 size-10 text-destructive" />
+              <h2 className="font-display text-3xl text-foreground">Modo desativado</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                O modo Fuga da Polícia foi desativado temporariamente para deixar o jogo mais leve e rápido no celular. Ele volta em uma próxima atualização.
+              </p>
+              <Button variant="race" className="mt-4 w-full font-display tracking-widest" onClick={() => setShowPoliceOff(false)}>
+                VOLTAR
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
