@@ -280,7 +280,7 @@ export class Scene3D {
     private onReady?: () => void,
   ) {
     // Phones like the Galaxy A11 render at a reduced pixel ratio; the image is upscaled.
-    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 0.8 : 1.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 0.7 : 1.5);
     this.baseDpr = dpr;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low && dpr < 1.5, powerPreference: "high-performance", stencil: false, precision: this.low ? "mediump" : "highp" });
     this.renderer.setPixelRatio(dpr);
@@ -567,7 +567,7 @@ export class Scene3D {
       return null;
     });
     if (player) this.setupPlayer(player.clone(true));
-    const keys: ModelKey[] = ["m4", "mustang", "jesko", "police"];
+    const keys: ModelKey[] = ["m4", "mustang", "jesko"];
     await Promise.all(
       keys.map((k) =>
         loadCar(k)
@@ -819,7 +819,7 @@ export class Scene3D {
     seen.clear();
     for (const t of s.traffic) {
       const z = toZ(t.y);
-      if (z < -(this.low ? 150 : VIEW_AHEAD + 20) || z > VIEW_BEHIND) continue;
+      if (z < -(this.low ? 120 : VIEW_AHEAD + 20) || z > VIEW_BEHIND) continue;
       seen.add(t);
       let rig = this.active.get(t);
       if (!rig) {

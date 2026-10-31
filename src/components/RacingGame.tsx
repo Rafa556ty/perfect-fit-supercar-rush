@@ -142,6 +142,7 @@ export function RacingGame() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [showGarage, setShowGarage] = useState(false);
+  const [showPoliceOff, setShowPoliceOff] = useState(false);
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS["pt-BR"];
 
@@ -677,7 +678,7 @@ export function RacingGame() {
 
                   <button
                     type="button"
-                    onClick={() => setMode("police")}
+                    onClick={() => setShowPoliceOff(true)}
                     className={cn(
                       "corner-cut flex flex-col items-center justify-center py-2 px-2 border transition-all text-xs font-bold",
                       mode === "police"
