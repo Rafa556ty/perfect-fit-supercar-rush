@@ -499,7 +499,7 @@ export class RacingEngine {
       if (newGear > this.currentGear && (inp.gas || this.boostActive)) {
         // Requirement 1: Flame appears on shift into even gears (2, 4, 6, 8)
         if (newGear % 2 === 0) {
-          this.exhaustFlameTimer = 0.28;
+          this.exhaustFlameTimer = 0.45;
           this.audio?.fireExhaustBackfire();
           this.emitExhaustParticles();
         }
@@ -1600,7 +1600,7 @@ export class RacingEngine {
     g.rotate(rot);
     g.globalCompositeOperation = "lighter";
 
-    const t = this.exhaustFlameTimer / 0.28;
+    const t = Math.min(1, this.exhaustFlameTimer / 0.45);
     const flameLen = (28 + Math.random() * 16) * t;
 
     // Revuelto dual central exhaust tips

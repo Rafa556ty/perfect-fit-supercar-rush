@@ -108,7 +108,7 @@ export function normalizeCar(scene: THREE.Group, spec: ModelSpec): THREE.Group {
     if (!m.isMesh) return;
     const label = `${(m.material as THREE.Material)?.name ?? ""} ${m.name}`.toLowerCase();
     const c = b.setFromObject(m).getCenter(new THREE.Vector3());
-    if (/tail|rear_light|taillight/.test(label)) {
+    if (/tail|rear_light|taillight|red_glass|glassred|lightglass_red|exhaust/.test(label)) {
       tail.add(c);
       tw++;
     } else if (/headlight|daylight|head_light/.test(label)) {
@@ -116,10 +116,19 @@ export function normalizeCar(scene: THREE.Group, spec: ModelSpec): THREE.Group {
       hw++;
     }
   });
-  if (hw && tw && spec.yaw === 0) {
-    head.divideScalar(hw);
-    tail.divideScalar(tw);
-    if (head.z > tail.z) scene.rotation.y += Math.PI; // nose was at +Z
+  if (spec.yaw === 0) {
+    const centre = new THREE.Box3().setFromObject(scene).getCenter(new THREE.Vector3());
+    let noseAtPlusZ: boolean;
+    if (tw) {
+      tail.divideScalar(tw);
+      noseAtPlusZ = hw ? head.divideScalar(hw).z > tail.z : tail.z < centre.z;
+    } else if (hw) {
+      noseAtPlusZ = head.divideScalar(hw).z > centre.z;
+    } else {
+      // Every bundled car file ships with its nose at +Z.
+      noseAtPlusZ = true;
+    }
+    if (noseAtPlusZ) scene.rotation.y += Math.PI;
   }
 
   scene.updateMatrixWorld(true);

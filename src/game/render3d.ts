@@ -279,15 +279,16 @@ export class Scene3D {
     private overlay: HTMLElement | null,
     private onReady?: () => void,
   ) {
-    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 1 : 1.5);
+    // Phones like the Galaxy A11 render at a reduced pixel ratio; the image is upscaled.
+    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 0.8 : 1.5);
     this.baseDpr = dpr;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low && dpr < 1.5, powerPreference: "high-performance" });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low && dpr < 1.5, powerPreference: "high-performance", stencil: false, precision: this.low ? "mediump" : "highp" });
     this.renderer.setPixelRatio(dpr);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = !this.low;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -1013,7 +1014,7 @@ export class Scene3D {
       len = 1.05 + Math.random() * 0.45;
     } else if (s.exhaustFlame > 0) {
       target = Math.min(1, s.exhaustFlame / 0.18);
-      len = 0.6 + Math.random() * 0.6;
+      len = 0.9 + Math.random() * 0.7;
     } else if (!s.gas && s.player.speed > 120 && s.phase === "playing") {
       this.popT -= dt;
       if (this.popT <= 0) {
