@@ -1014,7 +1014,7 @@ export class Scene3D {
       len = 1.05 + Math.random() * 0.45;
     } else if (s.exhaustFlame > 0) {
       target = Math.min(1, s.exhaustFlame / 0.18);
-      len = 0.6 + Math.random() * 0.6;
+      len = 0.9 + Math.random() * 0.7;
     } else if (!s.gas && s.player.speed > 120 && s.phase === "playing") {
       this.popT -= dt;
       if (this.popT <= 0) {

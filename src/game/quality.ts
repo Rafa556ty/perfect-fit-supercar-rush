@@ -20,7 +20,7 @@ export class AdaptiveResolution {
     this.frames = 0;
     const previous = this.scale;
     if (average > 1 / 26) {
-      this.scale = Math.max(0.65, this.scale - 0.15);
+      this.scale = Math.max(0.5, this.scale - 0.15);
       this.stable = 0;
     } else if (average < 1 / 50) {
       this.stable++;
