@@ -361,7 +361,11 @@ export function RacingGame() {
     return {
       onPointerDown: (e: RPointerEvent<HTMLElement>) => {
         e.preventDefault();
-        e.currentTarget.setPointerCapture(e.pointerId);
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // Some phones reject capture; the press must still register.
+        }
         pointers.current[key]?.add(e.pointerId);
         sync(key);
       },
