@@ -142,6 +142,7 @@ export function RacingGame() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [showGarage, setShowGarage] = useState(false);
+  const [showPoliceOff, setShowPoliceOff] = useState(false);
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS["pt-BR"];
 
@@ -677,7 +678,7 @@ export function RacingGame() {
 
                   <button
                     type="button"
-                    onClick={() => setMode("police")}
+                    onClick={() => setShowPoliceOff(true)}
                     className={cn(
                       "corner-cut flex flex-col items-center justify-center py-2 px-2 border transition-all text-xs font-bold",
                       mode === "police"
@@ -946,6 +947,20 @@ export function RacingGame() {
                   </Button>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {showPoliceOff && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-scrim px-6">
+            <div className="corner-cut w-full max-w-xs border border-hud-border bg-card p-5 text-center">
+              <ShieldAlert className="mx-auto mb-2 size-10 text-destructive" />
+              <h2 className="font-display text-3xl text-foreground">Modo desativado</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                O modo Fuga da Polícia foi desativado temporariamente para deixar o jogo mais leve e rápido no celular. Ele volta em uma próxima atualização.
+              </p>
+              <Button variant="race" className="mt-4 w-full font-display tracking-widest" onClick={() => setShowPoliceOff(false)}>
+                VOLTAR
+              </Button>
             </div>
           </div>
         )}
