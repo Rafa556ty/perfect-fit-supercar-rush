@@ -65,7 +65,7 @@ function roadTexture() {
   return canvasTex(W, H, (g) => {
     g.fillStyle = "#3a3c40";
     g.fillRect(0, 0, W, H);
-    noise(g, W, H, 26000, ["#45474c", "#2f3135", "#505257", "#36383c"], [1, 3]);
+    noise(g, W, H, 38000, ["#3d3f42", "#36383b", "#414346", "#383a3d"], [0.5, 1.5]);
     // tyre-polished lane centres
     const px = W / DECK_W;
     for (let l = 0; l < 3; l++) {
@@ -317,7 +317,7 @@ export class Scene3D {
     this.roadTex.repeat.set(1, STRIP_LEN / TILE_LEN);
     this.grassTex = grassTexture();
     this.grassTex.repeat.set(10, STRIP_LEN / 8);
-    this.roadMat = new THREE.MeshStandardMaterial({ map: this.roadTex, roughness: 0.88, metalness: 0.02 });
+    this.roadMat = new THREE.MeshStandardMaterial({ map: this.roadTex, roughness: 0.88, metalness: 0.02, bumpMap: this.roadTex, bumpScale: 0.012 });
 
     this.smokeTex = radialTex([
       [0, "rgba(255,255,255,0.9)"],
@@ -824,6 +824,7 @@ export class Scene3D {
       }
       for (const part of parts) {
         part.count = count;
+        part.visible = count > 0;
         part.instanceMatrix.needsUpdate = true;
       }
     }

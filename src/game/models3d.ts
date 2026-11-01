@@ -90,6 +90,12 @@ function batchCar(root: THREE.Group): THREE.Group {
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh) || Array.isArray(o.material)) return;
     const geo = o.geometry.clone();
+    const material = o.material as THREE.MeshStandardMaterial;
+    // Unused UV/tangent/color streams split otherwise identical materials.
+    if (!material.normalMap) geo.deleteAttribute("tangent");
+    if (!material.vertexColors) geo.deleteAttribute("color");
+    if (!material.aoMap && !material.lightMap) geo.deleteAttribute("uv1");
+    if (!material.map && !material.normalMap && !material.roughnessMap && !material.metalnessMap && !material.emissiveMap && !material.alphaMap) geo.deleteAttribute("uv");
     // Meshopt may quantize the same attribute differently on separate parts.
     // Read normalized values before merging, so no car parts disappear.
     for (const [name, attribute] of Object.entries(geo.attributes)) {
