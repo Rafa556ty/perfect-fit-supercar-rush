@@ -20,12 +20,12 @@ export class AdaptiveResolution {
     this.frames = 0;
     const previous = this.scale;
     if (average > 1 / 26) {
-      this.scale = Math.max(0.5, this.scale - 0.15);
+      this.scale = Math.max(0.8, this.scale - 0.1);
       this.stable = 0;
     } else if (average < 1 / 50) {
       this.stable++;
       if (this.stable >= 5) {
-        this.scale = Math.min(1, this.scale + 0.15);
+        this.scale = Math.min(1, this.scale + 0.1);
         this.stable = 0;
       }
     } else this.stable = 0;

@@ -6,17 +6,17 @@ describe("phone rendering", () => {
     expect(phoneProfile({ userAgent: "Android SM-A115M", cores: 8, memory: 2, touch: true })).toBe(true);
     expect(phoneProfile({ userAgent: "Desktop", cores: 16, memory: 16, touch: false })).toBe(false);
   });
-  it("reduces resolution on sustained slow frames, bounded at 50%", () => {
+  it("keeps a crisp 80% resolution floor on sustained slow frames", () => {
     const quality = new AdaptiveResolution();
     for (let i = 0; i < 400; i++) quality.sample(0.05);
-    expect(quality.scale).toBe(0.5);
+    expect(quality.scale).toBe(0.8);
   });
   it("ignores background frames and restores resolution after sustained fast frames", () => {
     const quality = new AdaptiveResolution();
     for (let i = 0; i < 70; i++) quality.sample(0.05);
-    expect(quality.scale).toBe(0.85);
+    expect(quality.scale).toBe(0.9);
     for (let i = 0; i < 400; i++) quality.sample(0.05, true);
-    expect(quality.scale).toBe(0.85);
+    expect(quality.scale).toBe(0.9);
     for (let i = 0; i < 1200; i++) quality.sample(1 / 60);
     expect(quality.scale).toBe(1);
   });
