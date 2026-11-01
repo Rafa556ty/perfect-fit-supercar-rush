@@ -1053,7 +1053,6 @@ export class RacingEngine {
       { type: "m5", img: this.images.m5, minSpeed: 110, maxSpeed: 170 },
       { type: "mustang-blue", img: this.images.mustangBlue, minSpeed: 100, maxSpeed: 160 },
       { type: "mustang-black", img: this.images.mustangBlack, minSpeed: 100, maxSpeed: 160 },
-      { type: "jesko", img: this.images.m5, minSpeed: 160, maxSpeed: 215, preferredLane: 2 },
     ] : [
       { type: "sedan", img: this.images.sedan, minSpeed: 85, maxSpeed: 115 },
       { type: "hatch", img: this.images.hatch, minSpeed: 80, maxSpeed: 110 },
@@ -1072,7 +1071,7 @@ export class RacingEngine {
     }
 
     const ppm = this.laneW / 3.6;
-    const dims3d: Partial<Record<CarType, [number, number]>> = { m5: [1.95, 4.8], "mustang-blue": [1.92, 4.8], "mustang-black": [1.92, 4.8], jesko: [2.05, 4.6] };
+    const dims3d: Partial<Record<CarType, [number, number]>> = { m5: [1.95, 4.8], "mustang-blue": [1.92, 4.8], "mustang-black": [1.92, 4.8] };
     const d3 = this.threeD ? dims3d[pick.type] : undefined;
     const w = d3 ? d3[0] * ppm : pick.type === "bus" ? this.carW * 1.05 : this.carW * 0.94;
     const cruise = rnd(pick.minSpeed, pick.maxSpeed) + Math.min(25, this.distance / 400);

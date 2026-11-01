@@ -4,24 +4,22 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { normalizeCar } from "./normalize-car";
+export { normalizeCar } from "./normalize-car";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-import revueltoAsset from "@/assets/models/revuelto-race.glb.asset.json";
+import revueltoAsset from "@/assets/models/revuelto-mobile.glb.asset.json";
 import m4Asset from "@/assets/models/bmw-m4-traffic.glb.asset.json";
-import shelbyAsset from "@/assets/models/shelby-police-traffic.glb.asset.json";
 import mustangAsset from "@/assets/models/mustang-gt-traffic.glb.asset.json";
-import jeskoAsset from "@/assets/models/jesko-traffic.glb.asset.json";
 
-export type ModelKey = "revuelto" | "m4" | "police" | "mustang" | "jesko";
+export type ModelKey = "revuelto" | "m4" | "mustang";
 
 type ModelSpec = { url: string; length: number; /** extra yaw (radians) when the file's nose isn't detected */ yaw: number };
 
 export const MODEL_SPECS: Record<ModelKey, ModelSpec> = {
   revuelto: { url: revueltoAsset.url, length: 4.95, yaw: 0 },
   m4: { url: m4Asset.url, length: 4.8, yaw: 0 },
-  police: { url: shelbyAsset.url, length: 4.8, yaw: 0 },
   mustang: { url: mustangAsset.url, length: 4.8, yaw: 0 },
-  jesko: { url: jeskoAsset.url, length: 4.6, yaw: 0 },
 };
 
 /** Revuelto body paint: the user wants it black, nothing else changed. */
@@ -85,67 +83,6 @@ export function paintRevuelto(root: THREE.Object3D) {
   });
 }
 
-/** Rotate so the nose points at -Z, then centre and ground the model at real length. */
-export function normalizeCar(scene: THREE.Group, spec: ModelSpec): THREE.Group {
-  const pivot = new THREE.Group();
-  pivot.add(scene);
-  scene.updateMatrixWorld(true);
-  let box = new THREE.Box3().setFromObject(scene);
-  let size = box.getSize(new THREE.Vector3());
-  // Long axis -> Z
-  if (size.x > size.z) scene.rotation.y = Math.PI / 2;
-  scene.rotation.y += spec.yaw;
-
-  // Nose detection: headlights are toward the front, tail lights toward the back.
-  scene.updateMatrixWorld(true);
-  const head = new THREE.Vector3();
-  const tail = new THREE.Vector3();
-  let hw = 0;
-  let tw = 0;
-  const b = new THREE.Box3();
-  scene.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    const label = `${(m.material as THREE.Material)?.name ?? ""} ${m.name}`.toLowerCase();
-    const c = b.setFromObject(m).getCenter(new THREE.Vector3());
-    if (/tail|rear_light|taillight|red_glass|glassred|lightglass_red|exhaust/.test(label)) {
-      tail.add(c);
-      tw++;
-    } else if (/headlight|daylight|head_light/.test(label)) {
-      head.add(c);
-      hw++;
-    }
-  });
-  if (spec.yaw === 0) {
-    const centre = new THREE.Box3().setFromObject(scene).getCenter(new THREE.Vector3());
-    let noseAtPlusZ: boolean;
-    if (tw) {
-      tail.divideScalar(tw);
-      noseAtPlusZ = hw ? head.divideScalar(hw).z > tail.z : tail.z < centre.z;
-    } else if (hw) {
-      noseAtPlusZ = head.divideScalar(hw).z > centre.z;
-    } else {
-      // Every bundled car file ships with its nose at +Z.
-      noseAtPlusZ = true;
-    }
-    if (noseAtPlusZ) scene.rotation.y += Math.PI;
-  }
-
-  scene.updateMatrixWorld(true);
-  box = new THREE.Box3().setFromObject(scene);
-  size = box.getSize(new THREE.Vector3());
-  const s = spec.length / Math.max(size.z, 1e-6);
-  scene.scale.multiplyScalar(s);
-  scene.updateMatrixWorld(true);
-  box = new THREE.Box3().setFromObject(scene);
-  const c = box.getCenter(new THREE.Vector3());
-  scene.position.x -= c.x;
-  scene.position.z -= c.z;
-  scene.position.y -= box.min.y;
-  pivot.updateMatrixWorld(true);
-  return pivot;
-}
-
 /** Static cars share one draw per compatible material, not one per tiny part. */
 function batchCar(root: THREE.Group): THREE.Group {
   root.updateMatrixWorld(true);
@@ -171,7 +108,8 @@ function batchCar(root: THREE.Group): THREE.Group {
     const expanded = geo.toNonIndexed();
     geo.dispose();
     const attributes = Object.keys(expanded.attributes).sort().join(",");
-    const key = `${o.material.uuid}:${attributes}`;
+    const mat = o.material as THREE.MeshStandardMaterial;
+    const key = JSON.stringify([mat.type, mat.color?.getHex(), mat.emissive?.getHex(), mat.emissiveIntensity, mat.metalness, mat.roughness, mat.map?.uuid, mat.normalMap?.uuid, mat.roughnessMap?.uuid, mat.metalnessMap?.uuid, mat.alphaMap?.uuid, mat.aoMap?.uuid, mat.emissiveMap?.uuid, mat.transparent, mat.opacity, mat.side, mat.alphaTest, mat.depthWrite, mat.vertexColors, attributes]);
     let group = groups.get(key);
     if (!group) {
       group = { material: o.material, geometries: [] };

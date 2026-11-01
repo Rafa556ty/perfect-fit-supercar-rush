@@ -23,7 +23,6 @@ const TYPE_MODEL: Record<CarType, ModelKey> = {
   m5: "m4",
   "mustang-blue": "mustang",
   "mustang-black": "mustang",
-  jesko: "jesko",
   bus: "m4",
   suv: "m4",
   sedan: "mustang",
@@ -252,11 +251,6 @@ export class Scene3D {
   private flameLen = 0;
   private popT = 0;
 
-  private police: THREE.Group | null = null;
-  private policeRed: THREE.PointLight;
-  private policeBlue: THREE.PointLight;
-  private policeBarR!: THREE.MeshBasicMaterial;
-  private policeBarB!: THREE.MeshBasicMaterial;
 
   private templates = new Map<ModelKey, THREE.Group>();
   private pool = new Map<ModelKey, CarRig[]>();
@@ -279,10 +273,10 @@ export class Scene3D {
     private overlay: HTMLElement | null,
     private onReady?: () => void,
   ) {
-    // Phones like the Galaxy A11 render at a reduced pixel ratio; the image is upscaled.
-    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 0.7 : 1.5);
+    // Preserve detail at CSS resolution; reduce draw calls rather than crushing pixels.
+    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 1 : 1.5);
     this.baseDpr = dpr;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low && dpr < 1.5, powerPreference: "high-performance", stencil: false, precision: this.low ? "mediump" : "highp" });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", stencil: false, precision: "highp" });
     this.renderer.setPixelRatio(dpr);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -318,8 +312,6 @@ export class Scene3D {
 
     this.headL = this.makeHeadlight();
     this.headR = this.makeHeadlight();
-    this.policeRed = new THREE.PointLight(0xff1020, 0, 14, 1.5);
-    this.policeBlue = new THREE.PointLight(0x2050ff, 0, 14, 1.5);
 
     this.roadTex = roadTexture();
     this.roadTex.repeat.set(1, STRIP_LEN / TILE_LEN);
@@ -341,7 +333,7 @@ export class Scene3D {
     this.buildWorld();
 
     // Rain: streaks in a box around the camera
-    const N = this.low ? 180 : 500;
+    const N = this.low ? 80 : 500;
     this.rainPos = new Float32Array(N * 6);
     for (let i = 0; i < N; i++) this.resetDrop(i, true);
     const rg = new THREE.BufferGeometry();
@@ -350,7 +342,7 @@ export class Scene3D {
     this.rain.frustumCulled = false;
     this.scene.add(this.rain);
 
-    for (let i = 0; i < (this.low ? 32 : 96); i++) {
+    for (let i = 0; i < (this.low ? 12 : 96); i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.smokeTex, transparent: true, depthWrite: false }));
       s.visible = false;
       this.sprites.push(s);
@@ -567,17 +559,18 @@ export class Scene3D {
       return null;
     });
     if (player) this.setupPlayer(player.clone(true));
-    const keys: ModelKey[] = ["m4", "mustang", "jesko"];
+    const keys: ModelKey[] = ["m4", "mustang"];
     await Promise.all(
       keys.map((k) =>
         loadCar(k)
           .then((t) => {
             this.templates.set(k, t);
-            if (k === "police") this.setupPolice(t.clone(true));
+            this.setupTrafficBatch(k, t);
           })
           .catch((e) => console.error(`model ${k} failed`, e)),
       ),
     );
+    await this.renderer.compileAsync(this.scene, this.camera);
     this.canvas.dataset["modelsReady"] = "true";
   }
 
@@ -686,23 +679,24 @@ export class Scene3D {
     return { group: g, outer: outer.mat, core: core.mat, glow, light };
   }
 
-  private setupPolice(car: THREE.Group) {
-    const box = new THREE.Box3().setFromObject(car);
-    const top = box.max.y;
-    this.policeBarR = new THREE.MeshBasicMaterial({ color: 0xff1020 });
-    this.policeBarB = new THREE.MeshBasicMaterial({ color: 0x1040ff });
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.25), this.policeBarR);
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.25), this.policeBarB);
-    r.position.set(-0.3, top + 0.04, 0.2);
-    b.position.set(0.3, top + 0.04, 0.2);
-    this.policeRed.position.set(-0.4, top + 0.4, 0.2);
-    this.policeBlue.position.set(0.4, top + 0.4, 0.2);
-    car.add(r, b);
-    if (!this.low) car.add(this.policeRed, this.policeBlue);
-    this.addContactShadow(car, 2, 4.6);
-    car.visible = false;
-    this.police = car;
-    this.scene.add(car);
+  private trafficBatches = new Map<ModelKey, THREE.InstancedMesh[]>();
+
+  private setupTrafficBatch(key: ModelKey, template: THREE.Group) {
+    const parts: THREE.InstancedMesh[] = [];
+    template.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const mesh = new THREE.InstancedMesh(object.geometry, object.material, 48);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      this.scene.add(mesh);
+      parts.push(mesh);
+    });
+    const shadow = new THREE.InstancedMesh(new THREE.PlaneGeometry(2, 4.6).rotateX(-Math.PI / 2).translate(0, 0.018, 0), new THREE.MeshBasicMaterial({ map: this.smokeTex, color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false }), 48);
+    shadow.frustumCulled = false;
+    this.scene.add(shadow);
+    parts.push(shadow);
+    this.trafficBatches.set(key, parts);
   }
 
   private takeRig(model: ModelKey): CarRig | null {
@@ -779,9 +773,9 @@ export class Scene3D {
     this.fog.color.copy(this.sky).lerp(this.tunnelColor, tunnelBlend);
     this.fog.near = lerp(60, 25, Math.max(rain, night * 0.5));
     this.fog.far = lerp(VIEW_AHEAD - 10, 150, rain);
-    this.sun.intensity = lerp(2.6, 0.04, night) * (1 - rain * 0.6) * (1 - tunnelBlend);
+    this.sun.intensity = lerp(2.9, 0.04, night) * (1 - rain * 0.6) * (1 - tunnelBlend);
     this.hemi.intensity = lerp(0.95, 0.38, night) * (1 - rain * 0.2) * lerp(1, 0.65, tunnelBlend);
-    this.scene.environmentIntensity = lerp(0.9, 0.12, night) * lerp(1, 0.35, tunnelBlend);
+    this.scene.environmentIntensity = lerp(1.15, 0.18, night) * lerp(1, 0.35, tunnelBlend);
     this.roadMat.roughness = lerp(0.88, 0.25, rain);
     this.roadMat.color.setScalar(lerp(1, 0.55, rain));
     this.tunnelLamp.intensity = tunnel ? 28 + Math.sin((pz % 8) / 8 * Math.PI * 2) * 10 : 0;
@@ -814,48 +808,23 @@ export class Scene3D {
       this.updateFlames(s, dt);
     }
 
-    // --- traffic
-    const seen = this.seen;
-    seen.clear();
-    for (const t of s.traffic) {
-      const z = toZ(t.y);
-      if (z < -(this.low ? 120 : VIEW_AHEAD + 20) || z > VIEW_BEHIND) continue;
-      seen.add(t);
-      let rig = this.active.get(t);
-      if (!rig) {
-        const r = this.takeRig(TYPE_MODEL[t.type]);
-        if (!r) continue;
-        rig = r;
-        this.active.set(t, rig);
+    // Shared material batches: every visible vehicle still draws, with one
+    // call per part/material rather than one call per car per part.
+    for (const [model, parts] of this.trafficBatches) {
+      let count = 0;
+      for (const car of s.traffic) {
+        const z = toZ(car.y);
+        if (TYPE_MODEL[car.type] !== model || z < -(this.low ? 120 : VIEW_AHEAD + 20) || z > VIEW_BEHIND || count >= 48) continue;
+        this.positionVector.set(toX(car.x), 0, z);
+        this.quaternion.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, -car.rot);
+        this.scaleVector.set(1, 1, 1);
+        this.matrix.compose(this.positionVector, this.quaternion, this.scaleVector);
+        for (const part of parts) part.setMatrixAt(count, this.matrix);
+        count++;
       }
-      rig.root.position.set(toX(t.x), 0, z);
-      rig.root.rotation.y = -t.rot;
-      const blink = Math.floor(t.signalTimer * 2.6) % 2 === 0;
-      (rig.blinkL.material as THREE.MeshStandardMaterial).emissiveIntensity = t.signal === -1 && blink ? 5 : 0;
-      (rig.blinkR.material as THREE.MeshStandardMaterial).emissiveIntensity = t.signal === 1 && blink ? 5 : 0;
-    }
-    this.tailMatOff.emissiveIntensity = lights ? 3.2 : 0.7;
-    for (const [car, rig] of this.active) {
-      if (!seen.has(car)) {
-        this.releaseRig(rig);
-        this.active.delete(car);
-      }
-    }
-
-    // --- police
-    if (this.police) {
-      const pol = s.police;
-      const z = toZ(pol.y);
-      const show = pol.active && z > -VIEW_AHEAD && z < VIEW_BEHIND + 20;
-      this.police.visible = show;
-      if (show) {
-        this.police.position.set(toX(pol.x), 0, z);
-        this.police.rotation.y = -pol.rot;
-        const ph = Math.floor(this.time * 7) % 2;
-        this.policeRed.intensity = ph ? 40 : 0;
-        this.policeBlue.intensity = ph ? 0 : 40;
-        this.policeBarR.color.setHex(ph ? 0xff2030 : 0x300408);
-        this.policeBarB.color.setHex(ph ? 0x0a1440 : 0x2050ff);
+      for (const part of parts) {
+        part.count = count;
+        part.instanceMatrix.needsUpdate = true;
       }
     }
 
@@ -876,8 +845,6 @@ export class Scene3D {
 
     // flash / police danger overlay
     if (this.overlay) {
-      const gap = s.pz - (s.police.y ? 0 : 0);
-      void gap;
       this.overlay.style.opacity = String(Math.min(0.6, s.flash * 0.6));
     }
 
@@ -887,7 +854,7 @@ export class Scene3D {
       this.canvas.dataset["triangles"] = String(this.renderer.info.render.triangles);
       this.canvas.dataset["quality"] = `${this.low ? "mobile" : "standard"}:${this.quality.scale.toFixed(2)}`;
     }
-    if (!this.ready && this.player) {
+    if (!this.ready && this.player && this.canvas.dataset["modelsReady"] === "true") {
       this.ready = true;
       this.onReady?.();
     }
@@ -959,7 +926,7 @@ export class Scene3D {
     const tFirst = Math.floor((pz - VIEW_BEHIND) / 7);
     for (let n = tFirst; i < 139; n++) {
       const z = n * 7;
-      if (z > pz + VIEW_AHEAD) break;
+      if (z > pz + (this.low ? 145 : VIEW_AHEAD)) break;
       for (const s of [-1, 1]) {
         const hsh = hash(n * 2 + (s > 0 ? 1 : 0));
         if (hsh < 0.25 || tunnelAt(z)) continue;
@@ -982,7 +949,7 @@ export class Scene3D {
     const lFirst = Math.floor((pz - VIEW_BEHIND) / 45);
     for (let n = lFirst; i < 24; n++) {
       const z = n * 45;
-      if (z > pz + VIEW_AHEAD) break;
+      if (z > pz + (this.low ? 145 : VIEW_AHEAD)) break;
       if (tunnelAt(z)) continue;
       const s = n % 2 === 0 ? -1 : 1;
       const x = s * (DECK_W / 2 + 1.4);
