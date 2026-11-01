@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { RacingGame } from "@/components/RacingGame";
 
 export const Route = createFileRoute("/")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Revuelto Rodovia — Jogo de Corrida" },

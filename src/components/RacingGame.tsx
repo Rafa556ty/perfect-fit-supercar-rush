@@ -409,7 +409,7 @@ export function RacingGame() {
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 bg-scrim-top px-3 pb-8 pt-[max(env(safe-area-inset-top),10px)]">
             <div className="flex items-start justify-between gap-2">
               {/* Speedometer & Gear display */}
-              <div className="corner-cut border border-hud-border bg-hud px-3.5 py-1.5 shadow-md backdrop-blur-sm">
+              <div className="corner-cut border border-hud-border bg-hud px-3.5 py-1.5 shadow-md">
                 <div className="flex items-baseline gap-2">
                   <span className="font-display text-4xl sm:text-5xl leading-none tabular-nums text-foreground">
                     {Math.round(hud.speed)}
@@ -441,7 +441,7 @@ export function RacingGame() {
 
               {/* Distance, Record & Audio Mute */}
               <div className="flex items-start gap-2">
-                <div className="corner-cut border border-hud-border bg-hud px-3 py-1.5 text-right shadow-md backdrop-blur-sm">
+                <div className="corner-cut border border-hud-border bg-hud px-3 py-1.5 text-right shadow-md">
                   <div className="font-display text-2xl sm:text-3xl leading-none tabular-nums text-foreground">
                     {formatKm(hud.distance)}
                     <span className="ml-1 text-sm text-primary">KM</span>
@@ -465,7 +465,7 @@ export function RacingGame() {
 
             {/* Police Pursuit Minimalist Status Gauge (Requirement 6) */}
             {mode === "police" && hud.policeGap !== undefined && (
-              <div className="mt-2.5 mx-auto max-w-[320px] corner-cut border border-hud-border bg-hud/90 px-3 py-1.5 backdrop-blur-md shadow-lg">
+              <div className="mt-2.5 mx-auto max-w-[320px] corner-cut border border-hud-border bg-hud/90 px-3 py-1.5 shadow-lg">
                 <div className="flex items-center justify-between text-[11px] font-bold tracking-wider">
                   <div className="flex items-center gap-1.5 text-foreground">
                     <ShieldAlert className="size-3.5 text-rose-500 animate-pulse" />
@@ -494,7 +494,7 @@ export function RacingGame() {
             {/* Near-miss combo multiplier */}
             {playing && hud.nearMissCombo > 0 && (
               <div className="mt-2 flex justify-center">
-                <div className="corner-cut border border-hud-border bg-hud/90 px-4 py-1 backdrop-blur-md shadow-glow">
+                <div className="corner-cut border border-hud-border bg-hud/90 px-4 py-1 shadow-glow">
                   <span className="font-display text-2xl leading-none tabular-nums text-primary animate-pulse-soft">
                     {hud.nearMissCombo}x
                   </span>
@@ -562,7 +562,7 @@ export function RacingGame() {
                     "corner-cut flex items-center justify-center gap-2 px-6 py-2 border border-hud-border transition-all duration-75 active:scale-95 shadow-lg",
                     active.horn
                       ? "border-primary bg-primary text-black font-bold scale-95 shadow-glow"
-                      : "bg-hud/90 text-foreground/90 backdrop-blur-md hover:bg-secondary",
+                      : "bg-hud/90 text-foreground/90 hover:bg-secondary",
                   )}
                 >
                   <Volume1 className="size-4 text-primary" />
@@ -868,7 +868,7 @@ export function RacingGame() {
 
         {/* Requirement 7: Demo Alert Dialog ("Pintar carro, trocar de carro") */}
         {showDemoModal && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 px-4">
             <div className="corner-cut border border-primary/50 bg-card p-5 max-w-sm text-center shadow-2xl animate-rise-in">
               <Palette className="mx-auto size-10 text-primary mb-2" />
               <h3 className="font-display text-2xl tracking-wide text-foreground">
@@ -892,7 +892,7 @@ export function RacingGame() {
 
         {/* Requirement 10: Language Selection Dialog (First Visit or from Menu Settings) */}
         {(showFirstLangModal || showSettingsModal) && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 px-4 backdrop-blur-md">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 px-4">
             <div className="corner-cut border border-hud-border bg-card p-5 w-full max-w-sm shadow-2xl animate-rise-in">
               <div className="flex items-center justify-between pb-3 border-b border-border">
                 <div className="flex items-center gap-2">

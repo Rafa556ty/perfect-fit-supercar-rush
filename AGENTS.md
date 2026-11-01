@@ -11,7 +11,7 @@
 
 ## Project rules
 - The racing simulation stays in the plain engine in `src/game/`; the dynamically imported Three.js renderer consumes snapshots, while React only handles HUD and menus — avoids per-frame React renders.
-- Car GLBs are normalized and batched by compatible material in `models3d.ts`; optimized CDN pointers are used for racing, with the full model retained for the garage — keeps downloads and part draw calls smaller.
+- Car GLBs retain exporter transforms through separate heading/grounding parents in `normalize-car.ts`; `models3d.ts` batches compatible materials, and traffic uses shared instanced batches — preserves car orientation and avoids per-car part draw calls.
 - Render-only phone selection and adaptive resolution live in `quality.ts` and are unit-tested; never lower the simulation cadence or traffic density to improve rendering.
 - Dev-only `window.__game` exposes live `state`, `input`, and fixed-step `sim(seconds)`; canvas data attributes expose modelsReady, drawCalls, triangles and quality, and the wrapper has data-scene-ready — reuse these for software-renderer verification.
 - Engine sound is pitch-matched granular playback of one real full-throttle recording (`src/game/audio.ts`), with a gearbox model driving rpm — avoids the "toy car" effect of pitch-shifting a short loop.

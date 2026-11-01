@@ -4,7 +4,7 @@
 // World: player near the origin, forward = -Z, road scenery scrolls with pz.
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import type { RenderCar, RenderSnapshot } from "./engine";
+import type { RenderSnapshot } from "./engine";
 import type { CarType } from "./traffic";
 import { loadCar, type ModelKey } from "./models3d";
 import { AdaptiveResolution, phoneProfile } from "./quality";
@@ -23,7 +23,6 @@ const TYPE_MODEL: Record<CarType, ModelKey> = {
   m5: "m4",
   "mustang-blue": "mustang",
   "mustang-black": "mustang",
-  jesko: "jesko",
   bus: "m4",
   suv: "m4",
   sedan: "mustang",
@@ -66,7 +65,7 @@ function roadTexture() {
   return canvasTex(W, H, (g) => {
     g.fillStyle = "#3a3c40";
     g.fillRect(0, 0, W, H);
-    noise(g, W, H, 26000, ["#45474c", "#2f3135", "#505257", "#36383c"], [1, 3]);
+    noise(g, W, H, 38000, ["#3d3f42", "#36383b", "#414346", "#383a3d"], [0.5, 1.5]);
     // tyre-polished lane centres
     const px = W / DECK_W;
     for (let l = 0; l < 3; l++) {
@@ -189,14 +188,6 @@ const flameFrag = /* glsl */ `
 
 type Flame = { group: THREE.Group; outer: THREE.ShaderMaterial; core: THREE.ShaderMaterial; glow: THREE.Sprite; light: THREE.PointLight };
 
-type CarRig = {
-  root: THREE.Group;
-  tail: THREE.Mesh[];
-  blinkL: THREE.Mesh;
-  blinkR: THREE.Mesh;
-  model: ModelKey;
-};
-
 export class Scene3D {
   private low = phoneProfile({ userAgent: navigator.userAgent, memory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory, cores: navigator.hardwareConcurrency || 4, touch: navigator.maxTouchPoints > 0 });
   private quality = new AdaptiveResolution();
@@ -205,7 +196,6 @@ export class Scene3D {
   private lastFrame = 0;
   private baseDpr = 1;
   private rainColor = new THREE.Color(0x707a86);
-  private seen = new Set<RenderCar>();
   private matrix = new THREE.Matrix4();
   private quaternion = new THREE.Quaternion();
   private scaleVector = new THREE.Vector3();
@@ -217,6 +207,7 @@ export class Scene3D {
   private hemi: THREE.HemisphereLight;
   private fog: THREE.Fog;
   private sky = new THREE.Color();
+  private daySky: THREE.CanvasTexture;
   private dayColor = new THREE.Color(0xa9cbe8);
   private duskColor = new THREE.Color(0x3a3550);
   private nightColor = new THREE.Color(0x05070d);
@@ -252,18 +243,8 @@ export class Scene3D {
   private flameLen = 0;
   private popT = 0;
 
-  private police: THREE.Group | null = null;
-  private policeRed: THREE.PointLight;
-  private policeBlue: THREE.PointLight;
-  private policeBarR!: THREE.MeshBasicMaterial;
-  private policeBarB!: THREE.MeshBasicMaterial;
 
   private templates = new Map<ModelKey, THREE.Group>();
-  private pool = new Map<ModelKey, CarRig[]>();
-  private active = new Map<RenderCar, CarRig>();
-  private tailMatOff = new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff1a0a, emissiveIntensity: 0.4 });
-  private blinkMat = new THREE.MeshStandardMaterial({ color: 0x5a3300, emissive: 0xffa000, emissiveIntensity: 0 });
-
   private sprites: THREE.Sprite[] = [];
   private smokeTex: THREE.Texture;
   private sparkTex: THREE.Texture;
@@ -279,10 +260,10 @@ export class Scene3D {
     private overlay: HTMLElement | null,
     private onReady?: () => void,
   ) {
-    // Phones like the Galaxy A11 render at a reduced pixel ratio; the image is upscaled.
-    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 0.7 : 1.5);
+    // Preserve detail at CSS resolution; reduce draw calls rather than crushing pixels.
+    const dpr = Math.min(window.devicePixelRatio || 1, this.low ? 1 : 1.5);
     this.baseDpr = dpr;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low && dpr < 1.5, powerPreference: "high-performance", stencil: false, precision: this.low ? "mediump" : "highp" });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", stencil: false, precision: "highp" });
     this.renderer.setPixelRatio(dpr);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -297,6 +278,28 @@ export class Scene3D {
     this.fog = new THREE.Fog(0xa9cbe8, 60, VIEW_AHEAD - 10);
     this.scene.fog = this.fog;
     this.scene.background = this.sky;
+    // A local panoramic sky provides natural horizon haze and cloud detail.
+    const skyMap = canvasTex(1024, 512, (g) => {
+      const gradient = g.createLinearGradient(0, 0, 0, 512);
+      gradient.addColorStop(0, "#598fc4");
+      gradient.addColorStop(0.48, "#a8cbe5");
+      gradient.addColorStop(0.7, "#e5e9e9");
+      gradient.addColorStop(1, "#94a287");
+      g.fillStyle = gradient;
+      g.fillRect(0, 0, 1024, 512);
+      for (let i = 0; i < 45; i++) {
+        const x = hash(i * 3) * 1024;
+        const y = 160 + hash(i * 7) * 90;
+        const cloud = g.createRadialGradient(x, y, 0, x, y, 70);
+        cloud.addColorStop(0, "rgba(255,255,255,0.22)");
+        cloud.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = cloud;
+        g.save(); g.translate(x, y); g.scale(1, 0.22); g.translate(-x, -y);
+        g.fillRect(x - 70, y - 70, 140, 140); g.restore();
+      }
+    });
+    skyMap.mapping = THREE.EquirectangularReflectionMapping;
+    this.daySky = skyMap;
 
     this.hemi = new THREE.HemisphereLight(0xdfeeff, 0x3b4a2a, 0.9);
     this.scene.add(this.hemi);
@@ -318,14 +321,12 @@ export class Scene3D {
 
     this.headL = this.makeHeadlight();
     this.headR = this.makeHeadlight();
-    this.policeRed = new THREE.PointLight(0xff1020, 0, 14, 1.5);
-    this.policeBlue = new THREE.PointLight(0x2050ff, 0, 14, 1.5);
 
     this.roadTex = roadTexture();
     this.roadTex.repeat.set(1, STRIP_LEN / TILE_LEN);
     this.grassTex = grassTexture();
     this.grassTex.repeat.set(10, STRIP_LEN / 8);
-    this.roadMat = new THREE.MeshStandardMaterial({ map: this.roadTex, roughness: 0.88, metalness: 0.02 });
+    this.roadMat = new THREE.MeshStandardMaterial({ map: this.roadTex, roughness: 0.88, metalness: 0.02, bumpMap: this.roadTex, bumpScale: 0.012 });
 
     this.smokeTex = radialTex([
       [0, "rgba(255,255,255,0.9)"],
@@ -341,7 +342,7 @@ export class Scene3D {
     this.buildWorld();
 
     // Rain: streaks in a box around the camera
-    const N = this.low ? 180 : 500;
+    const N = this.low ? 80 : 500;
     this.rainPos = new Float32Array(N * 6);
     for (let i = 0; i < N; i++) this.resetDrop(i, true);
     const rg = new THREE.BufferGeometry();
@@ -350,7 +351,7 @@ export class Scene3D {
     this.rain.frustumCulled = false;
     this.scene.add(this.rain);
 
-    for (let i = 0; i < (this.low ? 32 : 96); i++) {
+    for (let i = 0; i < (this.low ? 12 : 96); i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.smokeTex, transparent: true, depthWrite: false }));
       s.visible = false;
       this.sprites.push(s);
@@ -567,17 +568,18 @@ export class Scene3D {
       return null;
     });
     if (player) this.setupPlayer(player.clone(true));
-    const keys: ModelKey[] = ["m4", "mustang", "jesko"];
+    const keys: ModelKey[] = ["m4", "mustang"];
     await Promise.all(
       keys.map((k) =>
         loadCar(k)
           .then((t) => {
             this.templates.set(k, t);
-            if (k === "police") this.setupPolice(t.clone(true));
+            this.setupTrafficBatch(k, t);
           })
           .catch((e) => console.error(`model ${k} failed`, e)),
       ),
     );
+    await this.renderer.compileAsync(this.scene, this.camera);
     this.canvas.dataset["modelsReady"] = "true";
   }
 
@@ -589,6 +591,7 @@ export class Scene3D {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       const mats = Array.isArray(m.material) ? m.material : [m.material];
+      for (const material of mats) material.forceSinglePass = true;
       mats.forEach((mat, i) => {
         const name = mat.name.toLowerCase();
         if (name.startsWith("tail") || name === "taillight_rear") {
@@ -686,61 +689,32 @@ export class Scene3D {
     return { group: g, outer: outer.mat, core: core.mat, glow, light };
   }
 
-  private setupPolice(car: THREE.Group) {
-    const box = new THREE.Box3().setFromObject(car);
-    const top = box.max.y;
-    this.policeBarR = new THREE.MeshBasicMaterial({ color: 0xff1020 });
-    this.policeBarB = new THREE.MeshBasicMaterial({ color: 0x1040ff });
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.25), this.policeBarR);
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.25), this.policeBarB);
-    r.position.set(-0.3, top + 0.04, 0.2);
-    b.position.set(0.3, top + 0.04, 0.2);
-    this.policeRed.position.set(-0.4, top + 0.4, 0.2);
-    this.policeBlue.position.set(0.4, top + 0.4, 0.2);
-    car.add(r, b);
-    if (!this.low) car.add(this.policeRed, this.policeBlue);
-    this.addContactShadow(car, 2, 4.6);
-    car.visible = false;
-    this.police = car;
-    this.scene.add(car);
-  }
+  private trafficBatches = new Map<ModelKey, THREE.InstancedMesh[]>();
+  private trafficSignals = new Map<ModelKey, THREE.InstancedMesh>();
 
-  private takeRig(model: ModelKey): CarRig | null {
-    const free = this.pool.get(model)?.pop();
-    if (free) {
-      free.root.visible = true;
-      return free;
-    }
-    const tpl = this.templates.get(model);
-    if (!tpl) return null;
-    const root = tpl.clone(true);
-    this.addContactShadow(root, 2, 4.6);
-    const box = new THREE.Box3().setFromObject(root);
-    const rearZ = box.max.z - 0.02;
-    const w = (box.max.x - box.min.x) / 2;
-    const lampGeo = new THREE.BoxGeometry(0.34, 0.09, 0.04);
-    const tail: THREE.Mesh[] = [];
-    for (const s of [-1, 1]) {
-      const l = new THREE.Mesh(lampGeo, this.tailMatOff);
-      l.position.set(s * (w - 0.3), 0.85, rearZ);
-      root.add(l);
-      tail.push(l);
-    }
-    const blinkGeo = new THREE.BoxGeometry(0.12, 0.08, 0.04);
-    const blinkL = new THREE.Mesh(blinkGeo, this.blinkMat.clone());
-    const blinkR = new THREE.Mesh(blinkGeo, this.blinkMat.clone());
-    blinkL.position.set(-(w - 0.08), 0.85, rearZ);
-    blinkR.position.set(w - 0.08, 0.85, rearZ);
-    root.add(blinkL, blinkR);
-    this.scene.add(root);
-    return { root, tail, blinkL, blinkR, model };
-  }
-
-  private releaseRig(rig: CarRig) {
-    rig.root.visible = false;
-    let list = this.pool.get(rig.model);
-    if (!list) this.pool.set(rig.model, (list = []));
-    list.push(rig);
+  private setupTrafficBatch(key: ModelKey, template: THREE.Group) {
+    const parts: THREE.InstancedMesh[] = [];
+    template.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const mat of materials) mat.forceSinglePass = true;
+      const mesh = new THREE.InstancedMesh(object.geometry, object.material, 48);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      this.scene.add(mesh);
+      parts.push(mesh);
+    });
+    const shadow = new THREE.InstancedMesh(new THREE.PlaneGeometry(2, 4.6).rotateX(-Math.PI / 2).translate(0, 0.018, 0), new THREE.MeshBasicMaterial({ map: this.smokeTex, color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false }), 48);
+    shadow.frustumCulled = false;
+    this.scene.add(shadow);
+    parts.push(shadow);
+    this.trafficBatches.set(key, parts);
+    const indicators = new THREE.InstancedMesh(new THREE.BoxGeometry(0.13, 0.08, 0.04), new THREE.MeshBasicMaterial({ color: 0xffa000 }), 96);
+    indicators.frustumCulled = false;
+    indicators.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(indicators);
+    this.trafficSignals.set(key, indicators);
   }
 
   resize(w: number, h: number) {
@@ -776,12 +750,13 @@ export class Scene3D {
     this.sky.copy(this.dayColor).lerp(this.duskColor, dusk * 0.8).lerp(this.nightColor, night);
     this.sky.lerp(this.rainColor, rain * 0.6 * (1 - night));
     const tunnelBlend = this.tunnelFactor(pz);
+    this.scene.background = night < 0.05 && rain < 0.05 && tunnelBlend < 0.05 ? this.daySky : this.sky;
     this.fog.color.copy(this.sky).lerp(this.tunnelColor, tunnelBlend);
     this.fog.near = lerp(60, 25, Math.max(rain, night * 0.5));
     this.fog.far = lerp(VIEW_AHEAD - 10, 150, rain);
-    this.sun.intensity = lerp(2.6, 0.04, night) * (1 - rain * 0.6) * (1 - tunnelBlend);
+    this.sun.intensity = lerp(2.9, 0.04, night) * (1 - rain * 0.6) * (1 - tunnelBlend);
     this.hemi.intensity = lerp(0.95, 0.38, night) * (1 - rain * 0.2) * lerp(1, 0.65, tunnelBlend);
-    this.scene.environmentIntensity = lerp(0.9, 0.12, night) * lerp(1, 0.35, tunnelBlend);
+    this.scene.environmentIntensity = lerp(1.15, 0.18, night) * lerp(1, 0.35, tunnelBlend);
     this.roadMat.roughness = lerp(0.88, 0.25, rain);
     this.roadMat.color.setScalar(lerp(1, 0.55, rain));
     this.tunnelLamp.intensity = tunnel ? 28 + Math.sin((pz % 8) / 8 * Math.PI * 2) * 10 : 0;
@@ -814,48 +789,36 @@ export class Scene3D {
       this.updateFlames(s, dt);
     }
 
-    // --- traffic
-    const seen = this.seen;
-    seen.clear();
-    for (const t of s.traffic) {
-      const z = toZ(t.y);
-      if (z < -(this.low ? 120 : VIEW_AHEAD + 20) || z > VIEW_BEHIND) continue;
-      seen.add(t);
-      let rig = this.active.get(t);
-      if (!rig) {
-        const r = this.takeRig(TYPE_MODEL[t.type]);
-        if (!r) continue;
-        rig = r;
-        this.active.set(t, rig);
+    // Shared material batches: every visible vehicle still draws, with one
+    // call per part/material rather than one call per car per part.
+    for (const [model, parts] of this.trafficBatches) {
+      let count = 0;
+      let signalCount = 0;
+      const indicators = this.trafficSignals.get(model);
+      for (const car of s.traffic) {
+        const z = toZ(car.y);
+        if (TYPE_MODEL[car.type] !== model || z < -(this.low ? 120 : VIEW_AHEAD + 20) || z > VIEW_BEHIND || count >= 48) continue;
+        this.positionVector.set(toX(car.x), 0, z);
+        this.quaternion.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, -car.rot);
+        this.scaleVector.set(1, 1, 1);
+        this.matrix.compose(this.positionVector, this.quaternion, this.scaleVector);
+        for (const part of parts) part.setMatrixAt(count, this.matrix);
+        if (indicators && car.signal !== 0 && Math.floor(car.signalTimer * 2.6) % 2 === 0) {
+          this.positionVector.set(toX(car.x) + car.signal * 0.8, 0.78, z + 2.38);
+          this.matrix.compose(this.positionVector, this.quaternion, this.scaleVector);
+          indicators.setMatrixAt(signalCount++, this.matrix);
+        }
+        count++;
       }
-      rig.root.position.set(toX(t.x), 0, z);
-      rig.root.rotation.y = -t.rot;
-      const blink = Math.floor(t.signalTimer * 2.6) % 2 === 0;
-      (rig.blinkL.material as THREE.MeshStandardMaterial).emissiveIntensity = t.signal === -1 && blink ? 5 : 0;
-      (rig.blinkR.material as THREE.MeshStandardMaterial).emissiveIntensity = t.signal === 1 && blink ? 5 : 0;
-    }
-    this.tailMatOff.emissiveIntensity = lights ? 3.2 : 0.7;
-    for (const [car, rig] of this.active) {
-      if (!seen.has(car)) {
-        this.releaseRig(rig);
-        this.active.delete(car);
+      for (const part of parts) {
+        part.count = count;
+        part.visible = count > 0;
+        part.instanceMatrix.needsUpdate = true;
       }
-    }
-
-    // --- police
-    if (this.police) {
-      const pol = s.police;
-      const z = toZ(pol.y);
-      const show = pol.active && z > -VIEW_AHEAD && z < VIEW_BEHIND + 20;
-      this.police.visible = show;
-      if (show) {
-        this.police.position.set(toX(pol.x), 0, z);
-        this.police.rotation.y = -pol.rot;
-        const ph = Math.floor(this.time * 7) % 2;
-        this.policeRed.intensity = ph ? 40 : 0;
-        this.policeBlue.intensity = ph ? 0 : 40;
-        this.policeBarR.color.setHex(ph ? 0xff2030 : 0x300408);
-        this.policeBarB.color.setHex(ph ? 0x0a1440 : 0x2050ff);
+      if (indicators) {
+        indicators.count = signalCount;
+        indicators.visible = signalCount > 0;
+        indicators.instanceMatrix.needsUpdate = true;
       }
     }
 
@@ -876,8 +839,6 @@ export class Scene3D {
 
     // flash / police danger overlay
     if (this.overlay) {
-      const gap = s.pz - (s.police.y ? 0 : 0);
-      void gap;
       this.overlay.style.opacity = String(Math.min(0.6, s.flash * 0.6));
     }
 
@@ -887,7 +848,7 @@ export class Scene3D {
       this.canvas.dataset["triangles"] = String(this.renderer.info.render.triangles);
       this.canvas.dataset["quality"] = `${this.low ? "mobile" : "standard"}:${this.quality.scale.toFixed(2)}`;
     }
-    if (!this.ready && this.player) {
+    if (!this.ready && this.player && this.canvas.dataset["modelsReady"] === "true") {
       this.ready = true;
       this.onReady?.();
     }
@@ -959,7 +920,7 @@ export class Scene3D {
     const tFirst = Math.floor((pz - VIEW_BEHIND) / 7);
     for (let n = tFirst; i < 139; n++) {
       const z = n * 7;
-      if (z > pz + VIEW_AHEAD) break;
+      if (z > pz + (this.low ? 120 : VIEW_AHEAD)) break;
       for (const s of [-1, 1]) {
         const hsh = hash(n * 2 + (s > 0 ? 1 : 0));
         if (hsh < 0.25 || tunnelAt(z)) continue;
@@ -982,7 +943,7 @@ export class Scene3D {
     const lFirst = Math.floor((pz - VIEW_BEHIND) / 45);
     for (let n = lFirst; i < 24; n++) {
       const z = n * 45;
-      if (z > pz + VIEW_AHEAD) break;
+      if (z > pz + (this.low ? 120 : VIEW_AHEAD)) break;
       if (tunnelAt(z)) continue;
       const s = n % 2 === 0 ? -1 : 1;
       const x = s * (DECK_W / 2 + 1.4);
