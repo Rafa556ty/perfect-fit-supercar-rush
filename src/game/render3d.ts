@@ -690,6 +690,7 @@ export class Scene3D {
   }
 
   private trafficBatches = new Map<ModelKey, THREE.InstancedMesh[]>();
+  private trafficSignals = new Map<ModelKey, THREE.InstancedMesh>();
 
   private setupTrafficBatch(key: ModelKey, template: THREE.Group) {
     const parts: THREE.InstancedMesh[] = [];
@@ -709,6 +710,11 @@ export class Scene3D {
     this.scene.add(shadow);
     parts.push(shadow);
     this.trafficBatches.set(key, parts);
+    const indicators = new THREE.InstancedMesh(new THREE.BoxGeometry(0.13, 0.08, 0.04), new THREE.MeshBasicMaterial({ color: 0xffa000 }), 96);
+    indicators.frustumCulled = false;
+    indicators.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(indicators);
+    this.trafficSignals.set(key, indicators);
   }
 
   resize(w: number, h: number) {
@@ -787,6 +793,8 @@ export class Scene3D {
     // call per part/material rather than one call per car per part.
     for (const [model, parts] of this.trafficBatches) {
       let count = 0;
+      let signalCount = 0;
+      const indicators = this.trafficSignals.get(model);
       for (const car of s.traffic) {
         const z = toZ(car.y);
         if (TYPE_MODEL[car.type] !== model || z < -(this.low ? 120 : VIEW_AHEAD + 20) || z > VIEW_BEHIND || count >= 48) continue;
@@ -795,12 +803,22 @@ export class Scene3D {
         this.scaleVector.set(1, 1, 1);
         this.matrix.compose(this.positionVector, this.quaternion, this.scaleVector);
         for (const part of parts) part.setMatrixAt(count, this.matrix);
+        if (indicators && car.signal !== 0 && Math.floor(car.signalTimer * 2.6) % 2 === 0) {
+          this.positionVector.set(toX(car.x) + car.signal * 0.8, 0.78, z + 2.38);
+          this.matrix.compose(this.positionVector, this.quaternion, this.scaleVector);
+          indicators.setMatrixAt(signalCount++, this.matrix);
+        }
         count++;
       }
       for (const part of parts) {
         part.count = count;
         part.visible = count > 0;
         part.instanceMatrix.needsUpdate = true;
+      }
+      if (indicators) {
+        indicators.count = signalCount;
+        indicators.visible = signalCount > 0;
+        indicators.instanceMatrix.needsUpdate = true;
       }
     }
 
