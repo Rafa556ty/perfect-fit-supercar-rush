@@ -1,9 +1,10 @@
 # Roadmap — Versão 2.0 DEMO
 
 ## Finalização 3D e celular
-- [ ] Corrigir renderização dos carros e remover modelos Jesko/polícia.
-- [ ] Melhorar luz, reflexos e nitidez sem sacrificar otimização para Galaxy A11.
-- [ ] Verificar corrida 3D, controles e testes; desempenho real no A11 depende de teste no aparelho.
+- [x] Corrigir orientação/renderização dos carros e remover modelos Jesko/polícia.
+- [x] Melhorar luz, reflexos e nitidez; reduzir desenhos repetidos, efeitos e custo do vidro para celulares.
+- [x] Verificar corrida 3D, aceleração e testes no navegador.
+- [ ] Confirmar fluidez no Galaxy A11 — requer medição no aparelho do usuário; não disponível no ambiente de teste.
 
 - [x] Import base from GitHub (Lamborghini-nova)
 - [x] Engine sound from real recorded V12 samples (idle, load, rev, redline hold) — no oscillator synth

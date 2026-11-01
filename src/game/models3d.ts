@@ -149,6 +149,18 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
         scene.traverse((o) => {
           const m = o as THREE.Mesh;
           if (m.isMesh) {
+            const materials = Array.isArray(m.material) ? m.material : [m.material];
+            for (const material of materials) {
+              // Screen-space glass transmission redraws the entire world.
+              // Reflective alpha glass retains windows without that extra pass.
+              if (material instanceof THREE.MeshPhysicalMaterial && material.transmission > 0) {
+                material.transmission = 0;
+                material.transparent = true;
+                material.opacity = 0.48;
+                material.depthWrite = false;
+              }
+              material.forceSinglePass = true;
+            }
             m.castShadow = true;
             m.receiveShadow = false;
             m.frustumCulled = true;
