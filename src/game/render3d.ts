@@ -4,7 +4,7 @@
 // World: player near the origin, forward = -Z, road scenery scrolls with pz.
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import type { RenderCar, RenderSnapshot } from "./engine";
+import type { RenderSnapshot } from "./engine";
 import type { CarType } from "./traffic";
 import { loadCar, type ModelKey } from "./models3d";
 import { AdaptiveResolution, phoneProfile } from "./quality";
@@ -188,14 +188,6 @@ const flameFrag = /* glsl */ `
 
 type Flame = { group: THREE.Group; outer: THREE.ShaderMaterial; core: THREE.ShaderMaterial; glow: THREE.Sprite; light: THREE.PointLight };
 
-type CarRig = {
-  root: THREE.Group;
-  tail: THREE.Mesh[];
-  blinkL: THREE.Mesh;
-  blinkR: THREE.Mesh;
-  model: ModelKey;
-};
-
 export class Scene3D {
   private low = phoneProfile({ userAgent: navigator.userAgent, memory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory, cores: navigator.hardwareConcurrency || 4, touch: navigator.maxTouchPoints > 0 });
   private quality = new AdaptiveResolution();
@@ -204,7 +196,6 @@ export class Scene3D {
   private lastFrame = 0;
   private baseDpr = 1;
   private rainColor = new THREE.Color(0x707a86);
-  private seen = new Set<RenderCar>();
   private matrix = new THREE.Matrix4();
   private quaternion = new THREE.Quaternion();
   private scaleVector = new THREE.Vector3();
@@ -216,6 +207,7 @@ export class Scene3D {
   private hemi: THREE.HemisphereLight;
   private fog: THREE.Fog;
   private sky = new THREE.Color();
+  private daySky: THREE.CanvasTexture;
   private dayColor = new THREE.Color(0xa9cbe8);
   private duskColor = new THREE.Color(0x3a3550);
   private nightColor = new THREE.Color(0x05070d);
@@ -253,11 +245,6 @@ export class Scene3D {
 
 
   private templates = new Map<ModelKey, THREE.Group>();
-  private pool = new Map<ModelKey, CarRig[]>();
-  private active = new Map<RenderCar, CarRig>();
-  private tailMatOff = new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff1a0a, emissiveIntensity: 0.4 });
-  private blinkMat = new THREE.MeshStandardMaterial({ color: 0x5a3300, emissive: 0xffa000, emissiveIntensity: 0 });
-
   private sprites: THREE.Sprite[] = [];
   private smokeTex: THREE.Texture;
   private sparkTex: THREE.Texture;
@@ -291,6 +278,28 @@ export class Scene3D {
     this.fog = new THREE.Fog(0xa9cbe8, 60, VIEW_AHEAD - 10);
     this.scene.fog = this.fog;
     this.scene.background = this.sky;
+    // A local panoramic sky provides natural horizon haze and cloud detail.
+    const skyMap = canvasTex(1024, 512, (g) => {
+      const gradient = g.createLinearGradient(0, 0, 0, 512);
+      gradient.addColorStop(0, "#598fc4");
+      gradient.addColorStop(0.48, "#a8cbe5");
+      gradient.addColorStop(0.7, "#e5e9e9");
+      gradient.addColorStop(1, "#94a287");
+      g.fillStyle = gradient;
+      g.fillRect(0, 0, 1024, 512);
+      for (let i = 0; i < 45; i++) {
+        const x = hash(i * 3) * 1024;
+        const y = 160 + hash(i * 7) * 90;
+        const cloud = g.createRadialGradient(x, y, 0, x, y, 70);
+        cloud.addColorStop(0, "rgba(255,255,255,0.22)");
+        cloud.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = cloud;
+        g.save(); g.translate(x, y); g.scale(1, 0.22); g.translate(-x, -y);
+        g.fillRect(x - 70, y - 70, 140, 140); g.restore();
+      }
+    });
+    skyMap.mapping = THREE.EquirectangularReflectionMapping;
+    this.daySky = skyMap;
 
     this.hemi = new THREE.HemisphereLight(0xdfeeff, 0x3b4a2a, 0.9);
     this.scene.add(this.hemi);
@@ -582,6 +591,7 @@ export class Scene3D {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       const mats = Array.isArray(m.material) ? m.material : [m.material];
+      for (const material of mats) material.forceSinglePass = true;
       mats.forEach((mat, i) => {
         const name = mat.name.toLowerCase();
         if (name.startsWith("tail") || name === "taillight_rear") {
@@ -685,6 +695,8 @@ export class Scene3D {
     const parts: THREE.InstancedMesh[] = [];
     template.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const mat of materials) mat.forceSinglePass = true;
       const mesh = new THREE.InstancedMesh(object.geometry, object.material, 48);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
@@ -697,44 +709,6 @@ export class Scene3D {
     this.scene.add(shadow);
     parts.push(shadow);
     this.trafficBatches.set(key, parts);
-  }
-
-  private takeRig(model: ModelKey): CarRig | null {
-    const free = this.pool.get(model)?.pop();
-    if (free) {
-      free.root.visible = true;
-      return free;
-    }
-    const tpl = this.templates.get(model);
-    if (!tpl) return null;
-    const root = tpl.clone(true);
-    this.addContactShadow(root, 2, 4.6);
-    const box = new THREE.Box3().setFromObject(root);
-    const rearZ = box.max.z - 0.02;
-    const w = (box.max.x - box.min.x) / 2;
-    const lampGeo = new THREE.BoxGeometry(0.34, 0.09, 0.04);
-    const tail: THREE.Mesh[] = [];
-    for (const s of [-1, 1]) {
-      const l = new THREE.Mesh(lampGeo, this.tailMatOff);
-      l.position.set(s * (w - 0.3), 0.85, rearZ);
-      root.add(l);
-      tail.push(l);
-    }
-    const blinkGeo = new THREE.BoxGeometry(0.12, 0.08, 0.04);
-    const blinkL = new THREE.Mesh(blinkGeo, this.blinkMat.clone());
-    const blinkR = new THREE.Mesh(blinkGeo, this.blinkMat.clone());
-    blinkL.position.set(-(w - 0.08), 0.85, rearZ);
-    blinkR.position.set(w - 0.08, 0.85, rearZ);
-    root.add(blinkL, blinkR);
-    this.scene.add(root);
-    return { root, tail, blinkL, blinkR, model };
-  }
-
-  private releaseRig(rig: CarRig) {
-    rig.root.visible = false;
-    let list = this.pool.get(rig.model);
-    if (!list) this.pool.set(rig.model, (list = []));
-    list.push(rig);
   }
 
   resize(w: number, h: number) {
@@ -770,6 +744,7 @@ export class Scene3D {
     this.sky.copy(this.dayColor).lerp(this.duskColor, dusk * 0.8).lerp(this.nightColor, night);
     this.sky.lerp(this.rainColor, rain * 0.6 * (1 - night));
     const tunnelBlend = this.tunnelFactor(pz);
+    this.scene.background = night < 0.05 && rain < 0.05 && tunnelBlend < 0.05 ? this.daySky : this.sky;
     this.fog.color.copy(this.sky).lerp(this.tunnelColor, tunnelBlend);
     this.fog.near = lerp(60, 25, Math.max(rain, night * 0.5));
     this.fog.far = lerp(VIEW_AHEAD - 10, 150, rain);
@@ -927,7 +902,7 @@ export class Scene3D {
     const tFirst = Math.floor((pz - VIEW_BEHIND) / 7);
     for (let n = tFirst; i < 139; n++) {
       const z = n * 7;
-      if (z > pz + (this.low ? 145 : VIEW_AHEAD)) break;
+      if (z > pz + (this.low ? 120 : VIEW_AHEAD)) break;
       for (const s of [-1, 1]) {
         const hsh = hash(n * 2 + (s > 0 ? 1 : 0));
         if (hsh < 0.25 || tunnelAt(z)) continue;
@@ -950,7 +925,7 @@ export class Scene3D {
     const lFirst = Math.floor((pz - VIEW_BEHIND) / 45);
     for (let n = lFirst; i < 24; n++) {
       const z = n * 45;
-      if (z > pz + (this.low ? 145 : VIEW_AHEAD)) break;
+      if (z > pz + (this.low ? 120 : VIEW_AHEAD)) break;
       if (tunnelAt(z)) continue;
       const s = n % 2 === 0 ? -1 : 1;
       const x = s * (DECK_W / 2 + 1.4);
